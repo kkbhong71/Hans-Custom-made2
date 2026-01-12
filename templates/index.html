@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🎰 Han's Custom Made - 로또 예측</title>
+    
+    <!-- 외부 라이브러리 -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    
+    <!-- 커스텀 스타일 -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <!-- 헤더 -->
+    <header class="header">
+        <div class="header-content">
+            <h1>🎰 Han's Custom Made</h1>
+            <p class="subtitle">로또 번호 예측 시스템 v2.0</p>
+            <p class="latest-info">최신 데이터: <strong>{{ latest_round }}회차</strong></p>
+        </div>
+    </header>
+
+    <!-- 메인 컨테이너 -->
+    <main class="container">
+        
+        <!-- 컨트롤 패널 -->
+        <section class="control-panel">
+            <h2><i class="fas fa-sliders-h"></i> 분석 설정</h2>
+            <div class="control-group">
+                <label for="window-select">분석 구간 선택:</label>
+                <select id="window-select">
+                    <option value="30">최근 30회차</option>
+                    <option value="50" selected>최근 50회차 (권장)</option>
+                    <option value="100">최근 100회차</option>
+                    <option value="200">최근 200회차</option>
+                </select>
+                <button id="predict-btn" class="btn-primary">
+                    <i class="fas fa-magic"></i> 번호 생성
+                </button>
+                <button id="multi-btn" class="btn-secondary">
+                    <i class="fas fa-layer-group"></i> 다중 분석
+                </button>
+            </div>
+        </section>
+
+        <!-- 로딩 인디케이터 -->
+        <div id="loading" class="loading hidden">
+            <div class="spinner"></div>
+            <p>분석 중...</p>
+        </div>
+
+        <!-- 풀 정보 -->
+        <section id="pool-info" class="pool-info hidden">
+            <div class="info-card hot">
+                <i class="fas fa-fire"></i>
+                <h3>Hot Pool</h3>
+                <p class="count" id="hot-count">0</p>
+                <span>2회 이상 등장</span>
+            </div>
+            <div class="info-card cold">
+                <i class="fas fa-snowflake"></i>
+                <h3>Cold Pool</h3>
+                <p class="count" id="cold-count">0</p>
+                <span>1회 이하 등장</span>
+            </div>
+        </section>
+
+        <!-- 예측 결과 -->
+        <section id="results" class="results hidden">
+            <h2><i class="fas fa-star"></i> 예측 결과</h2>
+            <div id="prediction-cards" class="prediction-cards">
+                <!-- JavaScript로 동적 생성 -->
+            </div>
+        </section>
+
+        <!-- 빈도 차트 -->
+        <section id="chart-section" class="chart-section hidden">
+            <h2><i class="fas fa-chart-bar"></i> Hot 번호 빈도</h2>
+            <div class="chart-container">
+                <canvas id="frequencyChart"></canvas>
+            </div>
+        </section>
+
+        <!-- 알고리즘 설명 -->
+        <section class="algorithm-info">
+            <h2><i class="fas fa-info-circle"></i> 알고리즘 설명</h2>
+            <div class="algo-grid">
+                <div class="algo-card" data-algo="A">
+                    <span class="algo-icon">🎲</span>
+                    <h3>A. 랜덤</h3>
+                    <p>Hot Pool에서 완전 랜덤</p>
+                </div>
+                <div class="algo-card" data-algo="B">
+                    <span class="algo-icon">📊</span>
+                    <h3>B. 가중치</h3>
+                    <p>빈도 기반 확률 선택</p>
+                </div>
+                <div class="algo-card" data-algo="C">
+                    <span class="algo-icon">⚖️</span>
+                    <h3>C. 밸런스</h3>
+                    <p>홀짝 2:4~4:2 유지</p>
+                </div>
+                <div class="algo-card" data-algo="D">
+                    <span class="algo-icon">🎯</span>
+                    <h3>D. 합계구간</h3>
+                    <p>합계 100~170 범위</p>
+                </div>
+                <div class="algo-card" data-algo="E">
+                    <span class="algo-icon">🔀</span>
+                    <h3>E. 패턴분산</h3>
+                    <p>구간 집중 방지</p>
+                </div>
+                <div class="algo-card highlight" data-algo="F">
+                    <span class="algo-icon">🌟</span>
+                    <h3>F. AI초정밀</h3>
+                    <p>모든 조건 충족</p>
+                </div>
+                <div class="algo-card highlight" data-algo="G">
+                    <span class="algo-icon">🛡️</span>
+                    <h3>G. 과적합방지</h3>
+                    <p>Cold 번호 혼합</p>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- 푸터 -->
+    <footer class="footer">
+        <p>© 2024 Han's Custom Made | 본 시스템은 참고용이며 당첨을 보장하지 않습니다.</p>
+        <p>Made with ❤️ by kkbhong71</p>
+    </footer>
+
+    <!-- JavaScript -->
+    <script>
+        // =========================================================
+        // 전역 변수
+        // =========================================================
+        let frequencyChart = null;
+
+        // =========================================================
+        // DOM 요소
+        // =========================================================
+        const predictBtn = document.getElementById('predict-btn');
+        const multiBtn = document.getElementById('multi-btn');
+        const windowSelect = document.getElementById('window-select');
+        const loading = document.getElementById('loading');
+        const poolInfo = document.getElementById('pool-info');
+        const results = document.getElementById('results');
+        const chartSection = document.getElementById('chart-section');
+        const predictionCards = document.getElementById('prediction-cards');
+
+        // =========================================================
+        // 이벤트 리스너
+        // =========================================================
+        predictBtn.addEventListener('click', () => {
+            const window = windowSelect.value;
+            fetchPrediction(window);
+        });
+
+        multiBtn.addEventListener('click', () => {
+            fetchMultiPrediction();
+        });
+
+        // =========================================================
+        // API 호출 함수
+        // =========================================================
+        async function fetchPrediction(window) {
+            showLoading(true);
+            
+            try {
+                const response = await fetch(`/api/predict?window=${window}`);
+                const result = await response.json();
+                
+                if (result.success) {
+                    displayResults(result.data);
+                } else {
+                    alert('오류: ' + result.error);
+                }
+            } catch (error) {
+                alert('API 호출 실패: ' + error.message);
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        async function fetchMultiPrediction() {
+            showLoading(true);
+            
+            try {
+                const response = await fetch('/api/predict/multi');
+                const result = await response.json();
+                
+                if (result.success) {
+                    displayMultiResults(result.data);
+                } else {
+                    alert('오류: ' + result.error);
+                }
+            } catch (error) {
+                alert('API 호출 실패: ' + error.message);
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        // =========================================================
+        // 결과 표시 함수
+        // =========================================================
+        function displayResults(data) {
+            // 풀 정보 표시
+            document.getElementById('hot-count').textContent = data.hot_pool_size;
+            document.getElementById('cold-count').textContent = data.cold_pool_size;
+            poolInfo.classList.remove('hidden');
+
+            // 예측 카드 생성
+            predictionCards.innerHTML = '';
+            
+            data.predictions.forEach(pred => {
+                const card = createPredictionCard(pred, data.window);
+                predictionCards.appendChild(card);
+            });
+            
+            results.classList.remove('hidden');
+
+            // 차트 표시
+            displayChart(data.frequency_data);
+            chartSection.classList.remove('hidden');
+
+            // 결과 섹션으로 스크롤
+            results.scrollIntoView({ behavior: 'smooth' });
+        }
+
+        function displayMultiResults(data) {
+            // 풀 정보 (첫 번째 구간 기준)
+            const firstWindow = Object.keys(data)[0];
+            const firstData = data[firstWindow];
+            
+            document.getElementById('hot-count').textContent = firstData.hot_pool_size;
+            document.getElementById('cold-count').textContent = firstData.cold_pool_size;
+            poolInfo.classList.remove('hidden');
+
+            // 예측 카드 생성 (모든 구간)
+            predictionCards.innerHTML = '';
+            
+            for (const [window, windowData] of Object.entries(data)) {
+                // 구간 헤더
+                const header = document.createElement('div');
+                header.className = 'window-header';
+                header.innerHTML = `<h3>📂 최근 ${window}회차 분석</h3>`;
+                predictionCards.appendChild(header);
+                
+                // 해당 구간의 예측들
+                windowData.predictions.forEach(pred => {
+                    const card = createPredictionCard(pred, window);
+                    predictionCards.appendChild(card);
+                });
+            }
+            
+            results.classList.remove('hidden');
+
+            // 차트 (첫 번째 구간 기준)
+            displayChart(firstData.frequency_data);
+            chartSection.classList.remove('hidden');
+
+            results.scrollIntoView({ behavior: 'smooth' });
+        }
+
+        function createPredictionCard(pred, window) {
+            const card = document.createElement('div');
+            card.className = 'prediction-card';
+            
+            // 특별 알고리즘 강조
+            if (pred.code === 'F' || pred.code === 'G') {
+                card.classList.add('highlight');
+            }
+
+            // 아이콘 매핑
+            const icons = {
+                'A': '🎲', 'B': '📊', 'C': '⚖️', 'D': '🎯',
+                'E': '🔀', 'F': '🌟', 'G': '🛡️'
+            };
+
+            // 번호 공 생성
+            const ballsHtml = pred.numbers.map((num, idx) => 
+                `<span class="ball" style="background-color: ${pred.colors[idx]}">${num}</span>`
+            ).join('');
+
+            // 추가 정보
+            let extraInfo = '';
+            if (pred.code === 'F') {
+                extraInfo = `<span class="tag ac">AC: ${pred.ac_value}</span>
+                             <span class="tag last">끝수합: ${pred.last_digit_sum}</span>`;
+            } else if (pred.code === 'G') {
+                extraInfo = `<span class="tag cold">❄️ Cold: ${pred.cold_count}개</span>`;
+            }
+
+            card.innerHTML = `
+                <div class="card-header">
+                    <span class="algo-badge">${icons[pred.code]} ${pred.code}</span>
+                    <span class="algo-name">${pred.name}</span>
+                </div>
+                <div class="balls-container">
+                    ${ballsHtml}
+                </div>
+                <div class="card-stats">
+                    <span class="tag sum">합계: ${pred.sum}</span>
+                    <span class="tag ratio">홀짝: ${pred.odd_even}</span>
+                    <span class="tag ratio">고저: ${pred.high_low}</span>
+                    ${extraInfo}
+                </div>
+                <div class="card-section">
+                    <small>구간분포: ${pred.section.join('-')}</small>
+                </div>
+            `;
+
+            return card;
+        }
+
+        // =========================================================
+        // 차트 표시
+        // =========================================================
+        function displayChart(freqData) {
+            const ctx = document.getElementById('frequencyChart').getContext('2d');
+            
+            // 기존 차트 제거
+            if (frequencyChart) {
+                frequencyChart.destroy();
+            }
+
+            frequencyChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: freqData.numbers,
+                    datasets: [{
+                        label: '등장 횟수',
+                        data: freqData.counts,
+                        backgroundColor: freqData.colors,
+                        borderColor: freqData.colors.map(c => c),
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        title: {
+                            display: true,
+                            text: 'Hot Number Frequency',
+                            font: { size: 16 }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                stepSize: 1
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // =========================================================
+        // 유틸리티 함수
+        // =========================================================
+        function showLoading(show) {
+            if (show) {
+                loading.classList.remove('hidden');
+                results.classList.add('hidden');
+                chartSection.classList.add('hidden');
+            } else {
+                loading.classList.add('hidden');
+            }
+        }
+
+        // =========================================================
+        // 초기 실행
+        // =========================================================
+        document.addEventListener('DOMContentLoaded', () => {
+            // 페이지 로드 시 기본 예측 실행
+            fetchPrediction(50);
+        });
+    </script>
+</body>
+</html>
