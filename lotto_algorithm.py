@@ -33,7 +33,7 @@ class LottoAnalyzer:
         if csv_path is None:
             # 기본 경로: 프로젝트 내 data 폴더
             base_dir = Path(__file__).parent
-            csv_path = base_dir / 'data' / 'new_1212.csv'
+            csv_path = base_dir / 'data' / 'new_1213.csv'
         
         self.df = self._load_data(csv_path)
         self.number_cols = [f'num{i}' for i in range(1, 7)]
