@@ -47,7 +47,7 @@ def predict():
     Returns:
         JSON: 예측 결과
         {
-            "latest_round": 1212,
+            "latest_round": 1213,
             "window": 50,
             "hot_pool_size": 32,
             "cold_pool_size": 13,
